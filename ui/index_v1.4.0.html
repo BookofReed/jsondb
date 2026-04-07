@@ -1,0 +1,1195 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>JSON DB Admin</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@300;400;500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0a0c0f;
+    --surface: #111418;
+    --surface2: #181c22;
+    --border: #232830;
+    --border2: #2e3540;
+    --accent: #00d4aa;
+    --accent2: #0099ff;
+    --danger: #ff4757;
+    --warn: #ffa502;
+    --text: #e2e8f0;
+    --muted: #64748b;
+    --mono: 'IBM Plex Mono', monospace;
+    --sans: 'IBM Plex Sans', sans-serif;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: var(--bg); color: var(--text); font-family: var(--sans); font-size: 14px; min-height: 100vh; }
+
+  /* Layout */
+  .shell { display: grid; grid-template-columns: 240px 1fr; grid-template-rows: 52px 1fr; min-height: 100vh; }
+  .topbar { grid-column: 1/-1; background: var(--surface); border-bottom: 1px solid var(--border); display: flex; align-items: center; padding: 0 20px; gap: 16px; }
+  .topbar-logo { font-family: var(--mono); font-size: 13px; font-weight: 600; color: var(--accent); letter-spacing: 0.08em; text-transform: uppercase; }
+  .topbar-logo span { color: var(--muted); }
+  .topbar-status { margin-left: auto; display: flex; align-items: center; gap: 12px; font-family: var(--mono); font-size: 11px; color: var(--muted); }
+  .status-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--accent); box-shadow: 0 0 6px var(--accent); animation: pulse 2s infinite; }
+  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.4} }
+  .topbar-user { display: flex; align-items: center; gap: 8px; }
+  .topbar-username { font-family: var(--mono); font-size: 12px; color: var(--text); }
+
+  .sidebar { background: var(--surface); border-right: 1px solid var(--border); padding: 20px 0; }
+  .nav-section { padding: 0 12px 20px; }
+  .nav-label { font-family: var(--mono); font-size: 10px; color: var(--muted); letter-spacing: 0.12em; text-transform: uppercase; padding: 0 8px 8px; }
+  .nav-item { display: flex; align-items: center; gap: 10px; padding: 8px 12px; border-radius: 6px; cursor: pointer; font-size: 13px; color: var(--muted); transition: all .15s; border: none; background: none; width: 100%; text-align: left; }
+  .nav-item:hover { background: var(--surface2); color: var(--text); }
+  .nav-item.active { background: rgba(0,212,170,.08); color: var(--accent); }
+  .nav-item svg { flex-shrink: 0; }
+  .nav-badge { margin-left: auto; background: var(--surface2); color: var(--muted); font-family: var(--mono); font-size: 10px; padding: 1px 6px; border-radius: 10px; }
+  .nav-item.active .nav-badge { background: rgba(0,212,170,.15); color: var(--accent); }
+
+  .main { overflow-y: auto; padding: 28px; }
+
+  /* ── Auth gate ───────────────────────────────────────────────────────────── */
+  #auth-gate { position: fixed; inset: 0; background: var(--bg); display: flex; align-items: center; justify-content: center; z-index: 100; }
+  .auth-card { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 40px; width: 400px; }
+  .auth-card h2 { font-family: var(--mono); font-size: 14px; color: var(--accent); margin-bottom: 6px; }
+  .auth-card p  { color: var(--muted); font-size: 12px; margin-bottom: 24px; }
+  .auth-error   { color: var(--danger); font-size: 12px; margin-top: 10px; display: none; font-family: var(--mono); }
+  .auth-attempts { color: var(--warn); font-size: 11px; margin-top: 6px; display: none; font-family: var(--mono); }
+
+  /* Login mode tabs */
+  .auth-tabs { display: flex; gap: 2px; margin-bottom: 24px; background: var(--surface2); padding: 4px; border-radius: 8px; }
+  .auth-tab { flex: 1; padding: 7px 0; border-radius: 5px; cursor: pointer; font-family: var(--mono); font-size: 12px; color: var(--muted); border: none; background: none; text-align: center; transition: all .15s; }
+  .auth-tab.active { background: var(--surface); color: var(--text); }
+  .auth-panel { display: none; }
+  .auth-panel.active { display: block; }
+
+  /* Form elements */
+  .field { margin-bottom: 16px; }
+  .field label { display: block; font-family: var(--mono); font-size: 11px; color: var(--muted); letter-spacing: 0.06em; margin-bottom: 6px; text-transform: uppercase; }
+  .field input, .field textarea, .field select {
+    width: 100%; background: var(--bg); border: 1px solid var(--border2); border-radius: 6px;
+    padding: 9px 12px; color: var(--text); font-family: var(--mono); font-size: 13px;
+    outline: none; transition: border-color .15s;
+  }
+  .field input:focus, .field textarea:focus, .field select:focus { border-color: var(--accent); }
+  .field textarea { resize: vertical; min-height: 120px; }
+  .field select option { background: var(--surface2); }
+
+  /* Buttons */
+  .btn { display: inline-flex; align-items: center; gap: 6px; padding: 8px 16px; border-radius: 6px; border: none; cursor: pointer; font-family: var(--mono); font-size: 12px; font-weight: 500; transition: all .15s; }
+  .btn-primary { background: var(--accent); color: #000; }
+  .btn-primary:hover { background: #00ebb8; }
+  .btn-danger { background: rgba(255,71,87,.15); color: var(--danger); border: 1px solid rgba(255,71,87,.3); }
+  .btn-danger:hover { background: rgba(255,71,87,.25); }
+  .btn-ghost { background: var(--surface2); color: var(--text); border: 1px solid var(--border2); }
+  .btn-ghost:hover { border-color: var(--accent); color: var(--accent); }
+  .btn-sm { padding: 5px 10px; font-size: 11px; }
+  .btn:disabled { opacity: .4; cursor: not-allowed; pointer-events: none; }
+
+  /* Page headers */
+  .page-header { margin-bottom: 24px; }
+  .page-title { font-family: var(--mono); font-size: 18px; font-weight: 600; margin-bottom: 4px; }
+  .page-sub { color: var(--muted); font-size: 12px; }
+
+  /* Cards */
+  .card { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; }
+  .card-header { padding: 16px 20px; border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 12px; }
+  .card-title { font-family: var(--mono); font-size: 12px; font-weight: 600; color: var(--text); }
+  .card-body { padding: 20px; }
+
+  /* Stats row */
+  .stats-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin-bottom: 24px; }
+  .stat-card { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 20px; }
+  .stat-val { font-family: var(--mono); font-size: 28px; font-weight: 600; color: var(--accent); margin-bottom: 4px; }
+  .stat-label { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.06em; }
+
+  /* Table */
+  .table-wrap { overflow-x: auto; border-radius: 10px; border: 1px solid var(--border); }
+  table { width: 100%; border-collapse: collapse; }
+  thead { background: var(--surface2); }
+  th { font-family: var(--mono); font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.08em; padding: 10px 14px; text-align: left; border-bottom: 1px solid var(--border); white-space: nowrap; }
+  td { padding: 10px 14px; border-bottom: 1px solid var(--border); font-family: var(--mono); font-size: 12px; vertical-align: top; }
+  tr:last-child td { border-bottom: none; }
+  tr:hover td { background: rgba(255,255,255,.02); }
+  .cell-id { color: var(--muted); max-width: 160px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .cell-data { max-width: 300px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text); }
+  .cell-date { color: var(--muted); white-space: nowrap; }
+  .cell-actions { white-space: nowrap; display: flex; gap: 6px; }
+
+  /* Toolbar */
+  .toolbar { display: flex; align-items: center; gap: 10px; margin-bottom: 16px; }
+  .toolbar-search { flex: 1; display: flex; gap: 8px; }
+  .search-input { flex: 1; background: var(--surface); border: 1px solid var(--border2); border-radius: 6px; padding: 8px 12px; color: var(--text); font-family: var(--mono); font-size: 12px; outline: none; }
+  .search-input:focus { border-color: var(--accent); }
+
+  /* Modal */
+  .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,.7); z-index: 50; display: none; align-items: center; justify-content: center; padding: 20px; }
+  .modal-overlay.open { display: flex; }
+  .modal { background: var(--surface); border: 1px solid var(--border2); border-radius: 12px; width: 560px; max-height: 85vh; overflow-y: auto; }
+  .modal-header { padding: 20px 24px; border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; }
+  .modal-title { font-family: var(--mono); font-size: 14px; font-weight: 600; }
+  .modal-close { background: none; border: none; color: var(--muted); cursor: pointer; font-size: 18px; }
+  .modal-close:hover { color: var(--text); }
+  .modal-body { padding: 24px; }
+  .modal-footer { padding: 16px 24px; border-top: 1px solid var(--border); display: flex; justify-content: flex-end; gap: 10px; }
+
+  /* Role badges */
+  .role-badge { display: inline-block; padding: 2px 8px; border-radius: 4px; font-family: var(--mono); font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; }
+  .role-admin  { background: rgba(255,165,2,.15);  color: var(--warn); }
+  .role-writer { background: rgba(0,153,255,.15);  color: var(--accent2); }
+  .role-reader { background: rgba(100,116,139,.15); color: var(--muted); }
+
+  /* Curl guide */
+  .code-block { background: var(--bg); border: 1px solid var(--border); border-radius: 8px; padding: 16px; font-family: var(--mono); font-size: 12px; line-height: 1.7; overflow-x: auto; position: relative; }
+  .code-block .comment { color: var(--muted); }
+  .code-block .cmd  { color: var(--accent); }
+  .code-block .flag { color: var(--accent2); }
+  .code-block .val  { color: #ffd700; }
+  .copy-btn { position: absolute; top: 10px; right: 10px; background: var(--surface2); border: 1px solid var(--border2); color: var(--muted); padding: 4px 8px; border-radius: 4px; font-family: var(--mono); font-size: 10px; cursor: pointer; }
+  .copy-btn:hover { color: var(--text); }
+  .section-gap { margin-top: 24px; }
+  .tabs { display: flex; gap: 2px; margin-bottom: 20px; background: var(--surface2); padding: 4px; border-radius: 8px; }
+  .tab { padding: 6px 14px; border-radius: 5px; cursor: pointer; font-family: var(--mono); font-size: 12px; color: var(--muted); border: none; background: none; }
+  .tab.active { background: var(--surface); color: var(--text); }
+  .tab-panel { display: none; }
+  .tab-panel.active { display: block; }
+
+  /* Pager */
+  .pager { display: flex; align-items: center; gap: 10px; margin-top: 16px; font-family: var(--mono); font-size: 12px; color: var(--muted); }
+  .pager-info { flex: 1; }
+
+  /* Toast */
+  #toast { position: fixed; bottom: 24px; right: 24px; background: var(--surface2); border: 1px solid var(--border2); border-radius: 8px; padding: 12px 20px; font-family: var(--mono); font-size: 13px; z-index: 200; display: none; animation: slideUp .2s ease; }
+  #toast.success { border-color: var(--accent); color: var(--accent); }
+  #toast.error   { border-color: var(--danger); color: var(--danger); }
+  @keyframes slideUp { from { transform: translateY(10px); opacity:0 } to { transform:none; opacity:1 } }
+
+  /* Views */
+  .view { display: none; }
+  .view.active { display: block; }
+
+  .empty-state { text-align: center; padding: 60px 20px; color: var(--muted); }
+  .empty-state p { font-size: 13px; }
+
+  /* ── Key-value field builder ─────────────────────────────────────────────── */
+  .kv-entry { margin-bottom: 8px; }
+  .kv-row { display: grid; grid-template-columns: 1fr 1fr 32px 32px; gap: 8px; align-items: center; }
+  .kv-header { display: grid; grid-template-columns: 1fr 1fr 32px 32px; gap: 8px; margin-bottom: 4px; }
+  .kv-header span { font-family: var(--mono); font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: .06em; padding-left: 2px; }
+  .kv-val-cell { min-width: 0; }
+  .kv-val-cell input {
+    width: 100%; background: var(--bg); border: 1px solid var(--border2); border-radius: 6px;
+    padding: 8px 10px; color: var(--text); font-family: var(--mono); font-size: 12px;
+    outline: none; transition: border-color .15s;
+  }
+  .kv-val-cell input:focus { border-color: var(--accent); }
+  .kv-val-cell input.kv-key { color: var(--accent2); }
+  .kv-val-obj { background: rgba(0,153,255,.04); border: 1px dashed var(--border2); border-radius: 6px; padding: 8px 10px; color: var(--muted); font-family: var(--mono); font-size: 11px; font-style: italic; }
+  .kv-nest-btn { background: none; border: 1px solid var(--border2); color: var(--muted); cursor: pointer; font-size: 10px; font-family: var(--mono); font-weight: 600; display: flex; align-items: center; justify-content: center; border-radius: 4px; width: 32px; height: 32px; flex-shrink: 0; transition: all .15s; }
+  .kv-nest-btn:hover { color: var(--accent2); border-color: var(--accent2); }
+  .kv-nest-btn.active { color: var(--accent2); border-color: var(--accent2); background: rgba(0,153,255,.1); }
+  .kv-remove { background: none; border: none; color: var(--muted); cursor: pointer; font-size: 18px; line-height: 1; padding: 0; display: flex; align-items: center; justify-content: center; border-radius: 4px; width: 32px; height: 32px; flex-shrink: 0; }
+  .kv-remove:hover { color: var(--danger); background: rgba(255,71,87,.1); }
+  .kv-nested { display: none; margin-top: 6px; margin-left: 16px; padding-left: 14px; border-left: 2px solid var(--accent2); }
+  .kv-nested.active { display: block; }
+  .kv-sub-row { display: grid; grid-template-columns: 1fr 1fr 32px; gap: 8px; align-items: center; margin-bottom: 6px; }
+  .kv-sub-row input { width: 100%; background: var(--bg); border: 1px solid var(--border2); border-radius: 6px; padding: 7px 10px; color: var(--text); font-family: var(--mono); font-size: 12px; outline: none; transition: border-color .15s; }
+  .kv-sub-row input:focus { border-color: var(--accent2); }
+  .kv-sub-row input.kv-key { color: var(--accent2); }
+  .kv-sub-header { display: grid; grid-template-columns: 1fr 1fr 32px; gap: 8px; margin-bottom: 4px; margin-top: 2px; }
+  .kv-sub-header span { font-family: var(--mono); font-size: 10px; color: rgba(0,153,255,.6); text-transform: uppercase; letter-spacing: .06em; padding-left: 2px; }
+
+  /* Users view */
+  .user-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 16px; margin-bottom: 24px; }
+  .user-card { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 18px 20px; display: flex; align-items: center; gap: 14px; }
+  .user-avatar { width: 38px; height: 38px; border-radius: 50%; background: rgba(0,212,170,.12); border: 1px solid rgba(0,212,170,.2); display: flex; align-items: center; justify-content: center; font-family: var(--mono); font-size: 14px; font-weight: 600; color: var(--accent); flex-shrink: 0; text-transform: uppercase; }
+  .user-info { flex: 1; min-width: 0; }
+  .user-name { font-family: var(--mono); font-size: 13px; font-weight: 600; color: var(--text); }
+  .user-meta { font-size: 11px; color: var(--muted); margin-top: 3px; }
+
+  /* Session info banner */
+  .session-banner { background: rgba(0,212,170,.05); border: 1px solid rgba(0,212,170,.15); border-radius: 8px; padding: 12px 16px; margin-bottom: 20px; display: flex; align-items: center; gap: 12px; font-family: var(--mono); font-size: 12px; color: var(--muted); }
+  .session-banner strong { color: var(--accent); }
+</style>
+</head>
+<body>
+
+<!-- ── Auth Gate ─────────────────────────────────────────────────────────── -->
+<div id="auth-gate">
+  <div class="auth-card">
+    <h2>// JSON DB Admin</h2>
+    <p>Sign in to continue</p>
+
+    <div class="auth-tabs">
+      <button class="auth-tab active" onclick="switchAuthTab('login', this)">Username / Password</button>
+      <button class="auth-tab"        onclick="switchAuthTab('apikey', this)">API Key</button>
+    </div>
+
+    <!-- Username/password panel -->
+    <div class="auth-panel active" id="auth-panel-login">
+      <div class="field">
+        <label>Username</label>
+        <input type="text" id="login-username" placeholder="admin" autocomplete="username">
+      </div>
+      <div class="field">
+        <label>Password</label>
+        <input type="password" id="login-password" placeholder="••••••••" autocomplete="current-password">
+      </div>
+      <button class="btn btn-primary" id="login-btn" onclick="loginPassword()" style="width:100%">Sign In</button>
+    </div>
+
+    <!-- API key panel -->
+    <div class="auth-panel" id="auth-panel-apikey">
+      <div class="field">
+        <label>API Key</label>
+        <input type="password" id="api-key-input" placeholder="Enter API key..." autocomplete="off">
+      </div>
+      <button class="btn btn-primary" onclick="loginApiKey()" style="width:100%">Authenticate</button>
+    </div>
+
+    <div class="auth-error"    id="auth-error">Invalid credentials</div>
+    <div class="auth-attempts" id="auth-attempts"></div>
+  </div>
+</div>
+
+<!-- ── Main Shell ─────────────────────────────────────────────────────────── -->
+<div class="shell" id="main-shell" style="display:none">
+  <header class="topbar">
+    <div class="topbar-logo">JSON<span>DB</span> // Admin Console</div>
+    <div class="topbar-status">
+      <div class="status-dot"></div>
+      <span id="server-url">localhost:5000</span>
+      <div class="topbar-user" id="topbar-user" style="display:none">
+        <span id="topbar-username" class="topbar-username"></span>
+        <span id="topbar-role" class="role-badge"></span>
+      </div>
+    </div>
+    <button class="btn btn-ghost btn-sm" onclick="logout()">Sign out</button>
+  </header>
+
+  <nav class="sidebar">
+    <div class="nav-section">
+      <div class="nav-label">Database</div>
+      <button class="nav-item active" onclick="showView('records', this)">
+        <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="3" y1="15" x2="21" y2="15"/><line x1="9" y1="9" x2="9" y2="21"/></svg>
+        Records
+        <span class="nav-badge" id="nav-count">—</span>
+      </button>
+      <button class="nav-item" onclick="showView('add', this)">
+        <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/></svg>
+        Add Record
+      </button>
+    </div>
+    <div class="nav-section">
+      <div class="nav-label">Security</div>
+      <button class="nav-item" onclick="showView('keys', this)">
+        <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4"/></svg>
+        API Keys
+      </button>
+      <button class="nav-item" id="nav-users" onclick="showView('users', this)" style="display:none">
+        <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+        Users
+      </button>
+    </div>
+    <div class="nav-section">
+      <div class="nav-label">Docs</div>
+      <button class="nav-item" onclick="showView('curl', this)">
+        <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/></svg>
+        cURL Guide
+      </button>
+    </div>
+  </nav>
+
+  <main class="main">
+
+    <!-- Records View -->
+    <div class="view active" id="view-records">
+      <div class="page-header">
+        <div class="page-title">Records</div>
+        <div class="page-sub">Browse, search, edit and delete database records</div>
+      </div>
+      <div class="stats-row">
+        <div class="stat-card"><div class="stat-val" id="stat-total">—</div><div class="stat-label">Total Records</div></div>
+        <div class="stat-card"><div class="stat-val" id="stat-size">—</div><div class="stat-label">DB Size</div></div>
+        <div class="stat-card"><div class="stat-val" id="stat-modified">—</div><div class="stat-label">Last Modified</div></div>
+        <div class="stat-card"><div class="stat-val" id="stat-created">—</div><div class="stat-label">Created</div></div>
+      </div>
+      <div class="toolbar">
+        <div class="toolbar-search">
+          <input class="search-input" id="search-key" placeholder="Filter key...">
+          <input class="search-input" id="search-val" placeholder="Filter value...">
+          <button class="btn btn-ghost btn-sm" onclick="loadRecords()">Search</button>
+          <button class="btn btn-ghost btn-sm" onclick="clearSearch()">Clear</button>
+        </div>
+        <button class="btn btn-primary btn-sm" onclick="showView('add', document.querySelector('[onclick*=add]'))">+ Add</button>
+        <button class="btn btn-ghost btn-sm" onclick="loadRecords()">↻ Refresh</button>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr><th>ID</th><th>Data</th><th>Created at</th><th>Updated at</th><th>By</th><th>Actions</th></tr>
+          </thead>
+          <tbody id="records-tbody">
+            <tr><td colspan="6"><div class="empty-state"><p>Loading...</p></div></td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="pager">
+        <span class="pager-info" id="pager-info"></span>
+        <button class="btn btn-ghost btn-sm" id="pager-prev" onclick="changePage(-1)">← Prev</button>
+        <button class="btn btn-ghost btn-sm" id="pager-next" onclick="changePage(1)">Next →</button>
+      </div>
+    </div>
+
+    <!-- Add Record View -->
+    <div class="view" id="view-add">
+      <div class="page-header">
+        <div class="page-title">Add Record</div>
+        <div class="page-sub">Create a new record. Use {} to nest sub-fields inside a field.</div>
+      </div>
+      <div class="card">
+        <div class="card-body">
+          <div class="field">
+            <label>Record ID <span style="color:var(--muted);font-weight:300">(optional — auto-generated if blank)</span></label>
+            <input type="text" id="new-id" placeholder="e.g. user-001 or leave blank">
+          </div>
+          <div class="field">
+            <label>Fields</label>
+            <div id="new-fields-list"></div>
+            <button class="btn btn-ghost btn-sm" style="margin-top:8px" onclick="addNewField()">+ Add field</button>
+          </div>
+          <div style="display:flex;gap:10px;margin-top:8px">
+            <button class="btn btn-primary" onclick="createRecord()">Create Record</button>
+            <button class="btn btn-ghost" onclick="showView('records', document.querySelector('[onclick*=records]'))">Cancel</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- API Keys View -->
+    <div class="view" id="view-keys">
+      <div class="page-header">
+        <div class="page-title">API Keys</div>
+        <div class="page-sub">Manage programmatic access credentials. Keys are shown once on creation.</div>
+      </div>
+      <div class="card" style="margin-bottom:20px">
+        <div class="card-header"><span class="card-title">Generate New Key</span></div>
+        <div class="card-body" style="display:flex;gap:12px;align-items:flex-end">
+          <div class="field" style="flex:1;margin:0">
+            <label>Label</label>
+            <input type="text" id="key-label" placeholder="e.g. mobile-app">
+          </div>
+          <div class="field" style="margin:0">
+            <label>Role</label>
+            <select id="key-role">
+              <option value="reader">reader</option>
+              <option value="writer">writer</option>
+              <option value="admin">admin</option>
+            </select>
+          </div>
+          <button class="btn btn-primary" onclick="createKey()">Generate</button>
+        </div>
+        <div id="new-key-display" style="display:none;padding:0 20px 20px">
+          <div style="font-family:var(--mono);font-size:11px;color:var(--muted);margin-bottom:6px;text-transform:uppercase;letter-spacing:.06em">New Key — copy now, it won't be shown again</div>
+          <div style="display:flex;gap:8px">
+            <input id="new-key-val" readonly style="flex:1;background:rgba(0,212,170,.06);border:1px solid var(--accent);border-radius:6px;padding:10px 14px;color:var(--accent);font-family:var(--mono);font-size:13px;">
+            <button class="btn btn-ghost" onclick="copyKey()">Copy</button>
+          </div>
+        </div>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Label</th><th>Role</th><th>Key Preview</th><th>Created</th><th>Action</th></tr></thead>
+          <tbody id="keys-tbody">
+            <tr><td colspan="5"><div class="empty-state"><p>Loading...</p></div></td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Users View -->
+    <div class="view" id="view-users">
+      <div class="page-header">
+        <div class="page-title">Users</div>
+        <div class="page-sub">Manage login accounts. Passwords are hashed and never stored in plain text.</div>
+      </div>
+
+      <!-- Create user form -->
+      <div class="card" style="margin-bottom:24px">
+        <div class="card-header"><span class="card-title">Create New User</span></div>
+        <div class="card-body">
+          <div style="display:grid;grid-template-columns:1fr 1fr 1fr auto;gap:12px;align-items:flex-end">
+            <div class="field" style="margin:0">
+              <label>Username</label>
+              <input type="text" id="new-username" placeholder="e.g. alice" autocomplete="off">
+            </div>
+            <div class="field" style="margin:0">
+              <label>Password</label>
+              <input type="password" id="new-user-password" placeholder="min 8 chars" autocomplete="new-password">
+            </div>
+            <div class="field" style="margin:0">
+              <label>Role</label>
+              <select id="new-user-role">
+                <option value="reader">reader</option>
+                <option value="writer">writer</option>
+                <option value="admin">admin</option>
+              </select>
+            </div>
+            <button class="btn btn-primary" onclick="createUser()" style="align-self:flex-end">Create</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Users list -->
+      <div class="user-grid" id="users-grid">
+        <div class="empty-state"><p>Loading...</p></div>
+      </div>
+    </div>
+
+    <!-- cURL Guide -->
+    <div class="view" id="view-curl">
+      <div class="page-header">
+        <div class="page-title">cURL Reference</div>
+        <div class="page-sub">All endpoints accept and return JSON. Authenticate with a session token or API key.</div>
+      </div>
+
+      <div class="tabs">
+        <button class="tab active" onclick="switchTab('tab-auth',   this)">Auth</button>
+        <button class="tab"        onclick="switchTab('tab-read',   this)">Read</button>
+        <button class="tab"        onclick="switchTab('tab-write',  this)">Write</button>
+        <button class="tab"        onclick="switchTab('tab-delete', this)">Delete</button>
+        <button class="tab"        onclick="switchTab('tab-admin',  this)">Admin</button>
+      </div>
+
+      <div class="tab-panel active" id="tab-auth">
+        <div class="card"><div class="card-header"><span class="card-title">POST /api/auth/login — Get a session token</span></div><div class="card-body">
+        <div class="code-block"><button class="copy-btn" onclick="copyCode(this)">copy</button>
+<span class="cmd">curl</span> <span class="flag">-X POST</span> \
+  <span class="flag">-H</span> <span class="val">"Content-Type: application/json"</span> \
+  <span class="flag">-d</span> <span class="val">'{"username":"admin","password":"your_password"}'</span> \
+  http://localhost:5000/api/auth/login
+
+<span class="comment"># Response contains a token — use it as X-Session-Token</span>
+<span class="comment"># Session expires after 8 hours</span></div>
+        </div></div>
+        <div class="card section-gap"><div class="card-header"><span class="card-title">POST /api/auth/logout — Invalidate session</span></div><div class="card-body">
+        <div class="code-block"><button class="copy-btn" onclick="copyCode(this)">copy</button>
+<span class="cmd">curl</span> <span class="flag">-X POST</span> \
+  <span class="flag">-H</span> <span class="val">"X-Session-Token: YOUR_TOKEN"</span> \
+  http://localhost:5000/api/auth/logout</div>
+        </div></div>
+        <div class="card section-gap"><div class="card-header"><span class="card-title">Using an API Key directly (no login required)</span></div><div class="card-body">
+        <div class="code-block"><button class="copy-btn" onclick="copyCode(this)">copy</button>
+<span class="comment"># API keys still work — pass as X-API-Key header</span>
+<span class="cmd">curl</span> <span class="flag">-H</span> <span class="val">"X-API-Key: YOUR_API_KEY"</span> \
+  http://localhost:5000/api/records</div>
+        </div></div>
+      </div>
+
+      <div class="tab-panel" id="tab-read">
+        <div class="card"><div class="card-header"><span class="card-title">GET /api/records</span></div><div class="card-body">
+        <div class="code-block"><button class="copy-btn" onclick="copyCode(this)">copy</button>
+<span class="cmd">curl</span> <span class="flag">-H</span> <span class="val">"X-Session-Token: YOUR_TOKEN"</span> \
+  http://localhost:5000/api/records
+
+<span class="comment"># Pagination</span>
+<span class="cmd">curl</span> <span class="flag">-H</span> <span class="val">"X-Session-Token: YOUR_TOKEN"</span> \
+  <span class="val">"http://localhost:5000/api/records?page=1&limit=20"</span>
+
+<span class="comment"># Filter by field</span>
+<span class="cmd">curl</span> <span class="flag">-H</span> <span class="val">"X-Session-Token: YOUR_TOKEN"</span> \
+  <span class="val">"http://localhost:5000/api/records?filter_key=plan&filter_val=pro"</span></div>
+        </div></div>
+      </div>
+
+      <div class="tab-panel" id="tab-write">
+        <div class="card"><div class="card-header"><span class="card-title">POST /api/records — Create</span></div><div class="card-body">
+        <div class="code-block"><button class="copy-btn" onclick="copyCode(this)">copy</button>
+<span class="cmd">curl</span> <span class="flag">-X POST</span> \
+  <span class="flag">-H</span> <span class="val">"X-Session-Token: YOUR_TOKEN"</span> \
+  <span class="flag">-H</span> <span class="val">"Content-Type: application/json"</span> \
+  <span class="flag">-d</span> <span class="val">'{"name":"Jane","phone":{"mobile":"555-1234","work":"555-5678"}}'</span> \
+  http://localhost:5000/api/records</div>
+        </div></div>
+        <div class="card section-gap"><div class="card-header"><span class="card-title">PATCH /api/records/:id — Partial update</span></div><div class="card-body">
+        <div class="code-block"><button class="copy-btn" onclick="copyCode(this)">copy</button>
+<span class="cmd">curl</span> <span class="flag">-X PATCH</span> \
+  <span class="flag">-H</span> <span class="val">"X-Session-Token: YOUR_TOKEN"</span> \
+  <span class="flag">-H</span> <span class="val">"Content-Type: application/json"</span> \
+  <span class="flag">-d</span> <span class="val">'{"plan":"enterprise"}'</span> \
+  http://localhost:5000/api/records/RECORD_ID</div>
+        </div></div>
+      </div>
+
+      <div class="tab-panel" id="tab-delete">
+        <div class="card"><div class="card-header"><span class="card-title">DELETE /api/records/:id</span></div><div class="card-body">
+        <div class="code-block"><button class="copy-btn" onclick="copyCode(this)">copy</button>
+<span class="cmd">curl</span> <span class="flag">-X DELETE</span> \
+  <span class="flag">-H</span> <span class="val">"X-Session-Token: YOUR_TOKEN"</span> \
+  http://localhost:5000/api/records/RECORD_ID</div>
+        </div></div>
+      </div>
+
+      <div class="tab-panel" id="tab-admin">
+        <div class="card"><div class="card-header"><span class="card-title">POST /api/admin/users — Create user</span></div><div class="card-body">
+        <div class="code-block"><button class="copy-btn" onclick="copyCode(this)">copy</button>
+<span class="cmd">curl</span> <span class="flag">-X POST</span> \
+  <span class="flag">-H</span> <span class="val">"X-Session-Token: YOUR_TOKEN"</span> \
+  <span class="flag">-H</span> <span class="val">"Content-Type: application/json"</span> \
+  <span class="flag">-d</span> <span class="val">'{"username":"alice","password":"s3cur3pass","role":"writer"}'</span> \
+  http://localhost:5000/api/admin/users</div>
+        </div></div>
+        <div class="card section-gap"><div class="card-header"><span class="card-title">PUT /api/admin/users/:username/password — Change password</span></div><div class="card-body">
+        <div class="code-block"><button class="copy-btn" onclick="copyCode(this)">copy</button>
+<span class="cmd">curl</span> <span class="flag">-X PUT</span> \
+  <span class="flag">-H</span> <span class="val">"X-Session-Token: YOUR_TOKEN"</span> \
+  <span class="flag">-H</span> <span class="val">"Content-Type: application/json"</span> \
+  <span class="flag">-d</span> <span class="val">'{"password":"newpassword123"}'</span> \
+  http://localhost:5000/api/admin/users/alice/password</div>
+        </div></div>
+        <div class="card section-gap"><div class="card-header"><span class="card-title">POST /api/admin/keys — Create API key</span></div><div class="card-body">
+        <div class="code-block"><button class="copy-btn" onclick="copyCode(this)">copy</button>
+<span class="cmd">curl</span> <span class="flag">-X POST</span> \
+  <span class="flag">-H</span> <span class="val">"X-Session-Token: YOUR_TOKEN"</span> \
+  <span class="flag">-H</span> <span class="val">"Content-Type: application/json"</span> \
+  <span class="flag">-d</span> <span class="val">'{"label":"my-app","role":"writer"}'</span> \
+  http://localhost:5000/api/admin/keys</div>
+        </div></div>
+      </div>
+    </div>
+
+  </main>
+</div>
+
+<!-- Edit Modal -->
+<div class="modal-overlay" id="edit-modal">
+  <div class="modal">
+    <div class="modal-header">
+      <div class="modal-title">Edit Record</div>
+      <button class="modal-close" onclick="closeEdit()">×</button>
+    </div>
+    <div class="modal-body">
+      <div class="field">
+        <label>Record ID</label>
+        <input type="text" id="edit-id" readonly style="opacity:.5">
+      </div>
+      <div class="field">
+        <label>Fields</label>
+        <div id="edit-fields-list"></div>
+        <button class="btn btn-ghost btn-sm" style="margin-top:8px" onclick="addEditField()">+ Add field</button>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeEdit()">Cancel</button>
+      <button class="btn btn-primary" onclick="saveEdit()">Save Changes</button>
+    </div>
+  </div>
+</div>
+
+<!-- Toast -->
+<div id="toast"></div>
+
+<script>
+const BASE = window.location.origin;
+
+// Auth state
+let SESSION_TOKEN = '';
+let API_KEY_DIRECT = '';
+let currentRole = '';
+let currentUsername = '';
+
+// Pagination state
+let currentPage = 1;
+let totalPages  = 1;
+
+// Record cache — avoids JSON-in-onclick attribute
+const recordMap = {};
+
+// ─── Auth tab switcher ───────────────────────────────────────────────────────
+
+function switchAuthTab(name, btn) {
+  document.querySelectorAll('.auth-tab').forEach(b => b.classList.remove('active'));
+  document.querySelectorAll('.auth-panel').forEach(p => p.classList.remove('active'));
+  btn.classList.add('active');
+  document.getElementById('auth-panel-' + name).classList.add('active');
+  document.getElementById('auth-error').style.display    = 'none';
+  document.getElementById('auth-attempts').style.display = 'none';
+}
+
+// ─── Login: username/password ────────────────────────────────────────────────
+
+async function loginPassword() {
+  const username = document.getElementById('login-username').value.trim();
+  const password = document.getElementById('login-password').value;
+  if (!username || !password) return;
+
+  const btn = document.getElementById('login-btn');
+  btn.disabled = true;
+  btn.textContent = 'Signing in...';
+
+  try {
+    const res = await fetch(BASE + '/api/auth/login', {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify({ username, password })
+    });
+    const j = await res.json();
+
+    if (res.ok) {
+      SESSION_TOKEN   = j.token;
+      currentRole     = j.role;
+      currentUsername = j.username;
+      onLoginSuccess();
+    } else if (res.status === 429) {
+      showAuthError(j.error);
+    } else {
+      showAuthError('Invalid username or password');
+      if (j.attempts_remaining !== undefined) {
+        const el = document.getElementById('auth-attempts');
+        el.textContent = `${j.attempts_remaining} attempt${j.attempts_remaining !== 1 ? 's' : ''} remaining before lockout`;
+        el.style.display = 'block';
+      }
+    }
+  } catch {
+    showAuthError('Could not reach server');
+  }
+
+  btn.disabled = false;
+  btn.textContent = 'Sign In';
+}
+
+// ─── Login: API key ───────────────────────────────────────────────────────────
+
+async function loginApiKey() {
+  const key = document.getElementById('api-key-input').value.trim();
+  if (!key) return;
+  try {
+    const res = await fetch(BASE + '/api/stats', {
+      headers: { 'X-API-Key': key }
+    });
+    if (res.ok) {
+      API_KEY_DIRECT  = key;
+      currentRole     = 'admin'; // API keys don't expose role at stats level; fetch /me
+      currentUsername = '';
+      // Fetch actual role
+      const me = await fetch(BASE + '/api/auth/me', { headers: { 'X-API-Key': key } });
+      if (me.ok) {
+        const md = await me.json();
+        currentRole     = md.role;
+        currentUsername = md.label;
+      }
+      onLoginSuccess();
+    } else {
+      showAuthError('Invalid API key or insufficient permissions');
+    }
+  } catch {
+    showAuthError('Could not reach server');
+  }
+}
+
+function showAuthError(msg) {
+  const el = document.getElementById('auth-error');
+  el.textContent    = msg;
+  el.style.display  = 'block';
+}
+
+function onLoginSuccess() {
+  document.getElementById('auth-error').style.display    = 'none';
+  document.getElementById('auth-attempts').style.display = 'none';
+  document.getElementById('auth-gate').style.display     = 'none';
+  document.getElementById('main-shell').style.display    = 'grid';
+
+  // Topbar
+  if (currentUsername) {
+    document.getElementById('topbar-username').textContent = currentUsername;
+    const rb = document.getElementById('topbar-role');
+    rb.textContent  = currentRole;
+    rb.className    = 'role-badge role-' + currentRole;
+    document.getElementById('topbar-user').style.display = 'flex';
+  }
+
+  // Show Users nav only for admins
+  if (currentRole === 'admin') {
+    document.getElementById('nav-users').style.display = 'flex';
+  }
+
+  loadRecords();
+  loadStats();
+}
+
+// ─── Logout ───────────────────────────────────────────────────────────────────
+
+async function logout() {
+  if (SESSION_TOKEN) {
+    await apiFetch('/api/auth/logout', { method: 'POST' }).catch(() => {});
+  }
+  SESSION_TOKEN   = '';
+  API_KEY_DIRECT  = '';
+  currentRole     = '';
+  currentUsername = '';
+  document.getElementById('auth-gate').style.display     = 'flex';
+  document.getElementById('main-shell').style.display    = 'none';
+  document.getElementById('login-username').value        = '';
+  document.getElementById('login-password').value        = '';
+  document.getElementById('api-key-input').value         = '';
+  document.getElementById('topbar-user').style.display   = 'none';
+  document.getElementById('nav-users').style.display     = 'none';
+  document.getElementById('new-key-display').style.display = 'none';
+}
+
+// ─── API helper ─────────────────────────────────────────────────────────────
+
+async function apiFetch(path, opts = {}) {
+  const authHeader = SESSION_TOKEN
+    ? { 'X-Session-Token': SESSION_TOKEN }
+    : { 'X-API-Key': API_KEY_DIRECT };
+  opts.headers = {
+    'Content-Type': 'application/json',
+    ...authHeader,
+    ...(opts.headers || {})
+  };
+  const res = await fetch(BASE + path, opts);
+  // Auto-logout on session expiry
+  if (res.status === 401 && SESSION_TOKEN) {
+    toast('Session expired — please sign in again', 'error');
+    setTimeout(logout, 1500);
+  }
+  return res;
+}
+
+// ─── Views ───────────────────────────────────────────────────────────────────
+
+function showView(name, btn) {
+  document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
+  document.querySelectorAll('.nav-item').forEach(b => b.classList.remove('active'));
+  document.getElementById('view-' + name).classList.add('active');
+  if (btn) btn.classList.add('active');
+  if (name === 'records') { loadRecords(); loadStats(); }
+  if (name === 'keys')    loadKeys();
+  if (name === 'users')   loadUsers();
+}
+
+// ─── Stats ───────────────────────────────────────────────────────────────────
+
+async function loadStats() {
+  const res = await apiFetch('/api/stats');
+  if (!res.ok) return;
+  const d = await res.json();
+  document.getElementById('stat-total').textContent    = d.total_records;
+  document.getElementById('stat-size').textContent     = fmtBytes(d.db_size_bytes);
+  document.getElementById('stat-modified').textContent = d.meta.last_modified ? fmtDate(d.meta.last_modified) : '—';
+  document.getElementById('stat-created').textContent  = fmtDate(d.meta.created);
+  document.getElementById('nav-count').textContent     = d.total_records;
+}
+
+// ─── Records ─────────────────────────────────────────────────────────────────
+
+async function loadRecords() {
+  const fk  = document.getElementById('search-key')?.value.trim();
+  const fv  = document.getElementById('search-val')?.value.trim();
+  let url   = `/api/records?page=${currentPage}&limit=25`;
+  if (fk && fv) url += `&filter_key=${encodeURIComponent(fk)}&filter_val=${encodeURIComponent(fv)}`;
+  const res = await apiFetch(url);
+  if (!res.ok) return;
+  const d   = await res.json();
+  totalPages = d.pagination.pages || 1;
+  renderRecords(d.records, d.pagination);
+}
+
+function renderRecords(records, pg) {
+  const tbody = document.getElementById('records-tbody');
+  if (!records.length) {
+    tbody.innerHTML = `<tr><td colspan="6"><div class="empty-state"><p>No records found</p></div></td></tr>`;
+    document.getElementById('pager-info').textContent = '';
+    return;
+  }
+  records.forEach(r => { recordMap[r.id] = r; });
+  tbody.innerHTML = records.map(r => `
+    <tr>
+      <td class="cell-id"   title="${escAttr(r.id)}">${escAttr(r.id)}</td>
+      <td class="cell-data">${escAttr(JSON.stringify(r.data))}</td>
+      <td class="cell-date">${fmtDate(r.created_at)}</td>
+      <td class="cell-date">${fmtDate(r.updated_at)}</td>
+      <td class="cell-date" style="color:var(--muted)">${escAttr(r.created_by || '—')}</td>
+      <td><div class="cell-actions">
+        <button class="btn btn-ghost btn-sm" onclick="openEdit('${escAttr(r.id)}')">Edit</button>
+        <button class="btn btn-danger btn-sm" onclick="deleteRecord('${escAttr(r.id)}')">Del</button>
+      </div></td>
+    </tr>`).join('');
+  document.getElementById('pager-info').textContent = `Page ${pg.page} of ${pg.pages} — ${pg.total} records`;
+  document.getElementById('pager-prev').disabled = pg.page <= 1;
+  document.getElementById('pager-next').disabled = pg.page >= pg.pages;
+}
+
+function changePage(dir) {
+  currentPage = Math.max(1, Math.min(totalPages, currentPage + dir));
+  loadRecords();
+}
+
+function clearSearch() {
+  document.getElementById('search-key').value = '';
+  document.getElementById('search-val').value = '';
+  currentPage = 1;
+  loadRecords();
+}
+
+// ─── Key-Value field builder ──────────────────────────────────────────────────
+
+function makeSubRow(key = '', val = '') {
+  const row = document.createElement('div');
+  row.className = 'kv-sub-row';
+  row.innerHTML = `
+    <input class="kv-key" type="text" placeholder="sub-key">
+    <input class="kv-val" type="text" placeholder="value">
+    <button type="button" class="kv-remove" onclick="this.closest('.kv-sub-row').remove()">×</button>`;
+  row.querySelector('.kv-key').value = key;
+  row.querySelector('.kv-val').value = String(val);
+  return row;
+}
+
+function makeKvEntry(key = '', val = '') {
+  const isNested = typeof val === 'object' && val !== null;
+  const entry    = document.createElement('div');
+  entry.className = 'kv-entry';
+
+  const row      = document.createElement('div');
+  row.className  = 'kv-row';
+
+  const keyInput = document.createElement('input');
+  keyInput.className   = 'kv-key';
+  keyInput.type        = 'text';
+  keyInput.placeholder = 'key';
+  keyInput.value       = key;
+
+  const valCell = document.createElement('div');
+  valCell.className = 'kv-val-cell';
+
+  const valInput = document.createElement('input');
+  valInput.className   = 'kv-val';
+  valInput.type        = 'text';
+  valInput.placeholder = 'value';
+  valInput.value       = isNested ? '' : String(val);
+  if (isNested) valInput.style.display = 'none';
+
+  const valObj = document.createElement('div');
+  valObj.className  = 'kv-val-obj';
+  valObj.textContent = '— object —';
+  if (!isNested) valObj.style.display = 'none';
+
+  valCell.appendChild(valInput);
+  valCell.appendChild(valObj);
+
+  const nestBtn = document.createElement('button');
+  nestBtn.type      = 'button';
+  nestBtn.className = 'kv-nest-btn' + (isNested ? ' active' : '');
+  nestBtn.title     = 'Toggle nested object';
+  nestBtn.textContent = '{}';
+  nestBtn.onclick   = () => toggleNest(entry);
+
+  const removeBtn = document.createElement('button');
+  removeBtn.type      = 'button';
+  removeBtn.className = 'kv-remove';
+  removeBtn.title     = 'Remove field';
+  removeBtn.textContent = '×';
+  removeBtn.onclick   = () => entry.remove();
+
+  row.appendChild(keyInput);
+  row.appendChild(valCell);
+  row.appendChild(nestBtn);
+  row.appendChild(removeBtn);
+  entry.appendChild(row);
+
+  const nestedBlock = document.createElement('div');
+  nestedBlock.className = 'kv-nested' + (isNested ? ' active' : '');
+
+  const subHdr = document.createElement('div');
+  subHdr.className = 'kv-sub-header';
+  subHdr.innerHTML = '<span>Sub-key</span><span>Value</span><span></span>';
+  nestedBlock.appendChild(subHdr);
+
+  if (isNested && Object.keys(val).length) {
+    Object.entries(val).forEach(([sk, sv]) => nestedBlock.appendChild(makeSubRow(sk, sv)));
+  } else if (isNested) {
+    nestedBlock.appendChild(makeSubRow('', ''));
+  }
+
+  const addSubBtn = document.createElement('button');
+  addSubBtn.type      = 'button';
+  addSubBtn.className = 'btn btn-ghost btn-sm';
+  addSubBtn.style.marginTop = '6px';
+  addSubBtn.textContent = '+ Add sub-field';
+  addSubBtn.onclick = () => nestedBlock.insertBefore(makeSubRow('', ''), addSubBtn);
+  nestedBlock.appendChild(addSubBtn);
+
+  entry.appendChild(nestedBlock);
+  return entry;
+}
+
+function toggleNest(entry) {
+  const nestBtn     = entry.querySelector('.kv-nest-btn');
+  const valInput    = entry.querySelector('.kv-val-cell .kv-val');
+  const valObj      = entry.querySelector('.kv-val-obj');
+  const nestedBlock = entry.querySelector('.kv-nested');
+  const activating  = !nestBtn.classList.contains('active');
+  nestBtn.classList.toggle('active', activating);
+  valInput.style.display = activating ? 'none' : '';
+  valObj.style.display   = activating ? ''     : 'none';
+  nestedBlock.classList.toggle('active', activating);
+  if (activating && !nestedBlock.querySelector('.kv-sub-row')) {
+    nestedBlock.insertBefore(makeSubRow('', ''), nestedBlock.querySelector('button'));
+  }
+}
+
+function escAttr(s) {
+  return String(s)
+    .replace(/&/g, '&amp;').replace(/"/g, '&quot;')
+    .replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
+function kvListToObject(listId) {
+  const data = {};
+  document.querySelectorAll(`#${listId} > .kv-entry`).forEach(entry => {
+    const k = entry.querySelector(':scope > .kv-row > .kv-key').value.trim();
+    if (!k) return;
+    const nestedBlock = entry.querySelector('.kv-nested');
+    if (nestedBlock.classList.contains('active')) {
+      const sub = {};
+      nestedBlock.querySelectorAll('.kv-sub-row').forEach(row => {
+        const sk = row.querySelector('.kv-key').value.trim();
+        const sv = row.querySelector('.kv-val').value;
+        if (sk) sub[sk] = sv;
+      });
+      data[k] = sub;
+    } else {
+      data[k] = entry.querySelector(':scope > .kv-row .kv-val').value;
+    }
+  });
+  return data;
+}
+
+function ensureKvHeader(listId) {
+  const list = document.getElementById(listId);
+  if (!list.previousElementSibling?.classList.contains('kv-header')) {
+    const hdr = document.createElement('div');
+    hdr.className = 'kv-header';
+    hdr.innerHTML = '<span>Key</span><span>Value</span><span></span><span></span>';
+    list.before(hdr);
+  }
+}
+
+function addNewField()  { ensureKvHeader('new-fields-list');  document.getElementById('new-fields-list').appendChild(makeKvEntry('', '')); }
+function addEditField() { ensureKvHeader('edit-fields-list'); document.getElementById('edit-fields-list').appendChild(makeKvEntry('', '')); }
+
+function populateKvList(listId, data) {
+  const list = document.getElementById(listId);
+  list.innerHTML = '';
+  ensureKvHeader(listId);
+  if (!Object.keys(data).length) { list.appendChild(makeKvEntry('', '')); return; }
+  Object.entries(data).forEach(([k, v]) => list.appendChild(makeKvEntry(k, v)));
+}
+
+// ─── Create record ────────────────────────────────────────────────────────────
+
+async function createRecord() {
+  const id   = document.getElementById('new-id').value.trim();
+  const data = kvListToObject('new-fields-list');
+  if (id) data.id = id;
+  const res = await apiFetch('/api/records', { method: 'POST', body: JSON.stringify(data) });
+  const j   = await res.json();
+  if (res.ok) {
+    toast('Record created', 'success');
+    document.getElementById('new-id').value = '';
+    const list = document.getElementById('new-fields-list');
+    const hdr  = list.previousElementSibling;
+    if (hdr?.classList.contains('kv-header')) hdr.remove();
+    list.innerHTML = '';
+    showView('records', document.querySelector('[onclick*=records]'));
+  } else {
+    toast(j.error || 'Error', 'error');
+  }
+}
+
+// ─── Edit record ──────────────────────────────────────────────────────────────
+
+function openEdit(id) {
+  const record = recordMap[id];
+  if (!record) return;
+  document.getElementById('edit-id').value = record.id;
+  populateKvList('edit-fields-list', record.data || {});
+  document.getElementById('edit-modal').classList.add('open');
+}
+
+function closeEdit() { document.getElementById('edit-modal').classList.remove('open'); }
+
+async function saveEdit() {
+  const id  = document.getElementById('edit-id').value;
+  const data = kvListToObject('edit-fields-list');
+  const res = await apiFetch(`/api/records/${id}`, { method: 'PUT', body: JSON.stringify(data) });
+  const j   = await res.json();
+  if (res.ok) { closeEdit(); toast('Record updated', 'success'); loadRecords(); }
+  else toast(j.error || 'Error', 'error');
+}
+
+// ─── Delete record ────────────────────────────────────────────────────────────
+
+async function deleteRecord(id) {
+  if (!confirm(`Delete record "${id}"?`)) return;
+  const res = await apiFetch(`/api/records/${id}`, { method: 'DELETE' });
+  if (res.ok) { toast('Record deleted', 'success'); loadRecords(); loadStats(); }
+  else { const j = await res.json(); toast(j.error || 'Error', 'error'); }
+}
+
+// ─── API Keys ─────────────────────────────────────────────────────────────────
+
+async function loadKeys() {
+  const res = await apiFetch('/api/admin/keys');
+  if (!res.ok) {
+    document.getElementById('keys-tbody').innerHTML =
+      '<tr><td colspan="5" style="color:var(--danger);padding:20px">Admin access required</td></tr>';
+    return;
+  }
+  const d = await res.json();
+  const roleClass = r => r === 'admin' ? 'role-admin' : r === 'writer' ? 'role-writer' : 'role-reader';
+  document.getElementById('keys-tbody').innerHTML = d.keys.map(k => `
+    <tr>
+      <td>${escAttr(k.label)}</td>
+      <td><span class="role-badge ${roleClass(k.role)}">${escAttr(k.role)}</span></td>
+      <td style="font-family:var(--mono);font-size:11px;color:var(--muted)">${escAttr(k.key_preview)}</td>
+      <td class="cell-date">${fmtDate(k.created)}</td>
+      <td><button class="btn btn-danger btn-sm" onclick="deleteKey('${escAttr(k.key_hash)}')">Revoke</button></td>
+    </tr>`).join('');
+}
+
+async function createKey() {
+  const label = document.getElementById('key-label').value.trim() || 'new-key';
+  const role  = document.getElementById('key-role').value;
+  const res   = await apiFetch('/api/admin/keys', { method: 'POST', body: JSON.stringify({ label, role }) });
+  const j     = await res.json();
+  if (res.ok) {
+    document.getElementById('new-key-val').value         = j.key;
+    document.getElementById('new-key-display').style.display = 'block';
+    loadKeys();
+  } else toast(j.error || 'Error', 'error');
+}
+
+async function deleteKey(hash) {
+  if (!confirm('Revoke this API key?')) return;
+  const res = await apiFetch(`/api/admin/keys/${hash}`, { method: 'DELETE' });
+  const j   = await res.json();
+  if (res.ok) { toast('Key revoked', 'success'); loadKeys(); }
+  else toast(j.error || 'Error', 'error');
+}
+
+function copyKey() {
+  navigator.clipboard.writeText(document.getElementById('new-key-val').value);
+  toast('Key copied to clipboard', 'success');
+}
+
+// ─── Users ────────────────────────────────────────────────────────────────────
+
+async function loadUsers() {
+  const res = await apiFetch('/api/admin/users');
+  if (!res.ok) {
+    document.getElementById('users-grid').innerHTML =
+      '<div class="empty-state"><p style="color:var(--danger)">Admin access required</p></div>';
+    return;
+  }
+  const d    = await res.json();
+  const grid = document.getElementById('users-grid');
+  if (!d.users.length) {
+    grid.innerHTML = '<div class="empty-state"><p>No users found</p></div>';
+    return;
+  }
+  const roleClass = r => r === 'admin' ? 'role-admin' : r === 'writer' ? 'role-writer' : 'role-reader';
+  grid.innerHTML = d.users.map(u => `
+    <div class="user-card">
+      <div class="user-avatar">${escAttr(u.username[0])}</div>
+      <div class="user-info">
+        <div class="user-name">${escAttr(u.username)}</div>
+        <div class="user-meta">
+          <span class="role-badge ${roleClass(u.role)}" style="font-size:9px">${escAttr(u.role)}</span>
+          &nbsp; Created ${fmtDate(u.created)}
+        </div>
+      </div>
+      <button class="btn btn-danger btn-sm" onclick="deleteUser('${escAttr(u.username)}')">Remove</button>
+    </div>`).join('');
+}
+
+async function createUser() {
+  const username = document.getElementById('new-username').value.trim();
+  const password = document.getElementById('new-user-password').value;
+  const role     = document.getElementById('new-user-role').value;
+  if (!username || !password) { toast('Username and password required', 'error'); return; }
+  const res = await apiFetch('/api/admin/users', {
+    method: 'POST',
+    body:   JSON.stringify({ username, password, role })
+  });
+  const j = await res.json();
+  if (res.ok) {
+    toast(`User "${username}" created`, 'success');
+    document.getElementById('new-username').value      = '';
+    document.getElementById('new-user-password').value = '';
+    loadUsers();
+  } else toast(j.error || 'Error', 'error');
+}
+
+async function deleteUser(username) {
+  if (!confirm(`Remove user "${username}"?`)) return;
+  const res = await apiFetch(`/api/admin/users/${username}`, { method: 'DELETE' });
+  const j   = await res.json();
+  if (res.ok) { toast(`User "${username}" removed`, 'success'); loadUsers(); }
+  else toast(j.error || 'Error', 'error');
+}
+
+// ─── cURL tabs ────────────────────────────────────────────────────────────────
+
+function switchTab(id, btn) {
+  document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.tab').forEach(b => b.classList.remove('active'));
+  document.getElementById(id).classList.add('active');
+  btn.classList.add('active');
+}
+
+function copyCode(btn) {
+  const block = btn.closest('.code-block');
+  const clone = block.cloneNode(true);
+  clone.querySelector('.copy-btn')?.remove();
+  navigator.clipboard.writeText(clone.innerText.trim());
+  btn.textContent = 'copied!';
+  setTimeout(() => btn.textContent = 'copy', 1500);
+}
+
+// ─── Utilities ────────────────────────────────────────────────────────────────
+
+function fmtDate(iso) {
+  if (!iso) return '—';
+  const d = new Date(iso);
+  return d.toLocaleDateString() + ' ' + d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+}
+
+function fmtBytes(b) {
+  if (b < 1024)            return b + ' B';
+  if (b < 1024 * 1024)     return (b / 1024).toFixed(1) + ' KB';
+  return (b / 1024 / 1024).toFixed(2) + ' MB';
+}
+
+function toast(msg, type = 'success') {
+  const t = document.getElementById('toast');
+  t.textContent   = type === 'success' ? '✓ ' + msg : '✗ ' + msg;
+  t.className     = type;
+  t.style.display = 'block';
+  setTimeout(() => t.style.display = 'none', 3000);
+}
+
+// Keyboard submit on login forms
+document.getElementById('login-password').addEventListener('keydown', e => { if (e.key === 'Enter') loginPassword(); });
+document.getElementById('login-username').addEventListener('keydown', e => { if (e.key === 'Enter') loginPassword(); });
+document.getElementById('api-key-input').addEventListener('keydown',  e => { if (e.key === 'Enter') loginApiKey(); });
+
+// Close edit modal on overlay click
+document.getElementById('edit-modal').addEventListener('click', function(e) {
+  if (e.target === this) closeEdit();
+});
+</script>
+</body>
+</html>
